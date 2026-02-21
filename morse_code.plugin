@@ -1,0 +1,182 @@
+from base_plugin import BasePlugin, HookResult, HookStrategy, MenuItemData, MenuItemType
+from client_utils import get_last_fragment
+from android_utils import run_on_ui_thread
+from ui.bulletin import BulletinHelper
+from ui.alert import AlertDialogBuilder
+from ui.settings import Header, Switch
+from typing import Dict, Any
+
+__name__ = "Morsegram"
+__description__ = "Automatically converts sent messages to Morse code. Long-tap any message to decode it back."
+__version__ = "1.0.0"
+__id__ = "morse_code"
+__author__ = "@fiudeus"
+__min_version__ = "11.12.0"
+
+# Таблица морзянки
+
+MORSE_TABLE = {
+    'A': '.-',    'B': '-...',  'C': '-.-.',  'D': '-..',
+    'E': '.',     'F': '..-.',  'G': '--.',   'H': '....',
+    'I': '..',    'J': '.---',  'K': '-.-',   'L': '.-..',
+    'M': '--',    'N': '-.',    'O': '---',   'P': '.--.',
+    'Q': '--.-',  'R': '.-.',   'S': '...',   'T': '-',
+    'U': '..-',   'V': '...-',  'W': '.--',   'X': '-..-',
+    'Y': '-.--',  'Z': '--..',
+
+    'А': '.-',    'Б': '-...',  'В': '.--',   'Г': '--.',
+    'Д': '-..',   'Е': '.',     'Ё': '.',     'Ж': '...-',
+    'З': '--..',  'И': '..',    'Й': '.---',  'К': '-.-',
+    'Л': '.-..',  'М': '--',    'Н': '-.',    'О': '---',
+    'П': '.--.',  'Р': '.-.',   'С': '...',   'Т': '-',
+    'У': '..-',   'Ф': '..-.',  'Х': '....',  'Ц': '-.-.',
+    'Ч': '---.',  'Ш': '----',  'Щ': '--.-',  'Ъ': '.--.-',
+    'Ы': '-.--',  'Ь': '-..-',  'Э': '..-..', 'Ю': '..--.',
+    'Я': '.-.-',
+
+    '0': '-----', '1': '.----', '2': '..---', '3': '...--',
+    '4': '....-', '5': '.....', '6': '-....', '7': '--...',
+    '8': '---..',  '9': '----.',
+
+    '.': '.-.-.- ',
+    ',': '--..-- ', ';': '-.-.-. ', ':': '---... ',
+    '/': '-..-. ', ')': '-.--. ', '(': '-.--.- ',
+    '!': '-.-.-- ', '?': '..--.. ', '_': '..--.- ',
+    '"': '.-..-. ', "'": '.-..-. ', '&': '.-...  ',
+    '-': '-....- ', '+': '.-.-. ', '=': '-...- ',
+    '@': '.--.-. ', '$': '...-..- '
+}
+
+REVERSE_MORSE = {v: k for k, v in MORSE_TABLE.items()}
+
+# Разделитель слов, используем | потому что тг возможно съест пробелы
+
+WORD_SEP = ' | '
+CHAR_SEP = ' '
+
+
+def encode_morse(text: str) -> str:
+    result = []
+    for word in text.upper().split(' '):
+        encoded_word = []
+        for char in word:
+            if char in MORSE_TABLE:
+                encoded_word.append(MORSE_TABLE[char])
+            else:
+                encoded_word.append(char)
+        result.append(CHAR_SEP.join(encoded_word))
+    return WORD_SEP.join(result)
+
+
+def decode_morse(text: str) -> str:
+    result = []
+    words = text.split(WORD_SEP)
+    for word in words:
+        decoded_word = []
+        for symbol in word.strip().split(CHAR_SEP):
+            symbol = symbol.strip()
+            if not symbol:
+                continue
+            if symbol in REVERSE_MORSE:
+                decoded_word.append(REVERSE_MORSE[symbol])
+            else:
+                decoded_word.append(symbol)
+        result.append(''.join(decoded_word))
+    return ' '.join(result)
+
+
+def is_morse(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    # Морзянка содержит только '.', '-', ' ', '|'
+    return all(c in '.- |' for c in stripped) and ('.' in stripped or '-' in stripped)
+
+
+# ПЛАГИН
+
+class MorseCodePlugin(BasePlugin):
+
+    def on_plugin_load(self):
+        self.add_on_send_message_hook()
+        self.add_menu_item(
+            MenuItemData(
+                menu_type=MenuItemType.MESSAGE_CONTEXT_MENU,
+                text="Decode Morse",
+                subtext="Расшифровать морзянку",
+                icon="msg_info",
+                item_id="morse_decode_btn",
+                on_click=self._on_decode_click,
+            )
+        )
+        self.log("MorseCode plugin loaded!")
+
+    def on_plugin_unload(self):
+        self.log("MorseCode plugin unloaded!")
+
+    # Хук отправки: заменяем текст на морзянку
+
+    def on_send_message_hook(self, account: int, params: Any) -> HookResult:
+        if not self.get_setting("enabled", True):
+            return HookResult()
+
+        if not hasattr(params, 'message') or not isinstance(params.message, str):
+            return HookResult()
+
+        original = params.message.strip()
+        if not original:
+            return HookResult()
+
+        encoded = encode_morse(original)
+        self.log(f"Morse encode: '{original}' -> '{encoded}'")
+        params.message = encoded
+        return HookResult(strategy=HookStrategy.MODIFY, params=params)
+
+    # Обработчик нажатия "Decode Morse" в контекстном меню
+
+    def _on_decode_click(self, context: Dict[str, Any]):
+        message = context.get("message")
+        if not message:
+            return
+
+        text = str(message.messageText) if message.messageText else ""
+
+        if not text.strip():
+            run_on_ui_thread(lambda: BulletinHelper.show_error("Message is empty"))
+            return
+
+        if not is_morse(text):
+            run_on_ui_thread(lambda: BulletinHelper.show_error("This doesn't look like Morse code"))
+            return
+
+        decoded = decode_morse(text)
+        self.log(f"Morse decode: '{text}' -> '{decoded}'")
+
+        def show_dialog():
+            fragment = get_last_fragment()
+            if not fragment or not (activity := fragment.getParentActivity()):
+                return
+
+            dialog = AlertDialogBuilder(activity)
+            dialog.set_title("Morse Code")
+            dialog.set_message(
+                "Morse:\n" + text + "\n\nDecoded:\n" + decoded
+            )
+            dialog.set_positive_button("OK", lambda d, w: d.dismiss())
+            dialog.show()
+
+        run_on_ui_thread(show_dialog)
+
+    # Настройки
+
+    def create_settings(self):
+        return [
+            Header(text="Morse Code"),
+            Switch(
+                key="enabled",
+                text="Encode outgoing messages",
+                default=True,
+                subtext="Automatically converts your messages to Morse code before sending",
+                icon="msg_text",
+            ),
+        ]
