@@ -13,12 +13,6 @@
 - 🌍 **Поддержка нескольких языков** — латиница, кириллица, цифры и основные знаки препинания
 - ⚙️ **Переключатель** — кодирование можно включить или выключить в настройках плагина без удаления
 
-### Требования
-
-
-|---|---|
-| Exteragram | ≥ 11.12.0 |
-
 ### Установка
 
 1. Откройте **Exteragram → Настройки → Exteragram → Плагины**
@@ -48,14 +42,6 @@
 . , ; : / ( ) ! ? _ " ' & - + = @ $
 ```
 
-### Автор
-
-**@fiudeus**
-
-### Лицензия
-
-Плагин предоставляется «как есть». Используйте на свой страх и риск.
-
 ---
 
 ## 🇬🇧 English
@@ -68,12 +54,6 @@ An [Exteragram](https://exteragram.app/) plugin that automatically converts your
 - 🔍 **Decode on demand** — long-tap any message and choose **"Decode Morse"** to see the decoded text in a dialog
 - 🌍 **Multilingual support** — handles Latin letters, Cyrillic letters, digits, and common punctuation
 - ⚙️ **Toggle switch** — enable or disable encoding from the plugin settings without uninstalling
-
-### Requirements
-
-
-|---|---|
-| Exteragram | ≥ 11.12.0 |
 
 ### Installation
 
@@ -103,11 +83,3 @@ The plugin encodes/decodes **Latin** (A–Z), **Cyrillic** (А–Я), **digits**
 ```
 . , ; : / ( ) ! ? _ " ' & - + = @ $
 ```
-
-### Author
-
-**@fiudeus**
-
-### License
-
-This plugin is provided as-is. Use at your own risk.
