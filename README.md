@@ -15,7 +15,7 @@
 
 ### Требования
 
-| | |
+
 |---|---|
 | Exteragram | ≥ 11.12.0 |
 
@@ -71,7 +71,7 @@ An [Exteragram](https://exteragram.app/) plugin that automatically converts your
 
 ### Requirements
 
-| | |
+
 |---|---|
 | Exteragram | ≥ 11.12.0 |
 
