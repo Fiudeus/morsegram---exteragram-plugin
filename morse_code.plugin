@@ -4,18 +4,22 @@ from android_utils import run_on_ui_thread
 from ui.bulletin import BulletinHelper
 from ui.alert import AlertDialogBuilder
 from ui.settings import Header, Switch
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Tuple
 
 __name__ = "Morsegram"
-__description__ = "Automatically converts sent messages to Morse code. Long-tap any message to decode it back."
-__version__ = "1.0.0"
-__id__ = "morse_code"
+__description__ = "Encodes outgoing messages (Morse / NATO phonetic). Long-tap any message to decode back."
+__version__ = "1.1.0"
+__id__ = "morsegram"
 __author__ = "@fiudeus"
 __min_version__ = "11.12.0"
 
-# Таблица морзянки
+
+# -----------------------------
+# Morse (фикс: без хвостовых пробелов в кодах пунктуации)
+# -----------------------------
 
 MORSE_TABLE = {
+    # Latin
     'A': '.-',    'B': '-...',  'C': '-.-.',  'D': '-..',
     'E': '.',     'F': '..-.',  'G': '--.',   'H': '....',
     'I': '..',    'J': '.---',  'K': '-.-',   'L': '.-..',
@@ -24,6 +28,7 @@ MORSE_TABLE = {
     'U': '..-',   'V': '...-',  'W': '.--',   'X': '-..-',
     'Y': '-.--',  'Z': '--..',
 
+    # Cyrillic (как было)
     'А': '.-',    'Б': '-...',  'В': '.--',   'Г': '--.',
     'Д': '-..',   'Е': '.',     'Ё': '.',     'Ж': '...-',
     'З': '--..',  'И': '..',    'Й': '.---',  'К': '-.-',
@@ -34,123 +39,384 @@ MORSE_TABLE = {
     'Ы': '-.--',  'Ь': '-..-',  'Э': '..-..', 'Ю': '..--.',
     'Я': '.-.-',
 
+    # digits
     '0': '-----', '1': '.----', '2': '..---', '3': '...--',
     '4': '....-', '5': '.....', '6': '-....', '7': '--...',
-    '8': '---..',  '9': '----.',
+    '8': '---..', '9': '----.',
 
-    '.': '.-.-.- ',
-    ',': '--..-- ', ';': '-.-.-. ', ':': '---... ',
-    '/': '-..-. ', ')': '-.--. ', '(': '-.--.- ',
-    '!': '-.-.-- ', '?': '..--.. ', '_': '..--.- ',
-    '"': '.-..-. ', "'": '.-..-. ', '&': '.-...  ',
-    '-': '-....- ', '+': '.-.-. ', '=': '-...- ',
-    '@': '.--.-. ', '$': '...-..- '
+    # punctuation (стандарт)
+    '.': '.-.-.-',
+    ',': '--..--',
+    ';': '-.-.-.',
+    ':': '---...',
+    '/': '-..-.',
+    '(': '-.--.',
+    ')': '-.--.-',
+    '!': '-.-.--',
+    '?': '..--..',
+    '_': '..--.-',
+    '"': '.-..-.',
+    "'": '.----.',
+    '&': '.-...',
+    '-': '-....-',
+    '+': '.-.-.',
+    '=': '-...-',
+    '@': '.--.-.',
+    '$': '...-..-',
 }
 
-REVERSE_MORSE = {v: k for k, v in MORSE_TABLE.items()}
+# строим обратную таблицу со strip() чтобы не ловить баги пробелов
+REVERSE_MORSE = {v.strip(): k for k, v in MORSE_TABLE.items()}
 
-# Разделитель слов, используем | потому что тг возможно съест пробелы
 
-WORD_SEP = ' | '
-CHAR_SEP = ' '
+# -----------------------------
+# NATO phonetic (Альфа Браво Чарли…)
+# + декод понимает и RU, и EN варианты
+# -----------------------------
+
+# Русские названия (как чаще пишут)
+NATO_RU = {
+    'A': 'АЛЬФА',
+    'B': 'БРАВО',
+    'C': 'ЧАРЛИ',
+    'D': 'ДЕЛЬТА',
+    'E': 'ЭХО',
+    'F': 'ФОКСТРОТ',
+    'G': 'ГОЛЬФ',
+    'H': 'ХОТЕЛ',
+    'I': 'ИНДИЯ',
+    'J': 'ДЖУЛЬЕТ',
+    'K': 'КИЛО',
+    'L': 'ЛИМА',
+    'M': 'МАЙК',
+    'N': 'НОВЕМБЕР',
+    'O': 'ОСКАР',
+    'P': 'ПАПА',
+    'Q': 'КВЕБЕК',
+    'R': 'РОМЕО',
+    'S': 'СЬЕРРА',
+    'T': 'ТАНГО',
+    'U': 'ЮНИФОРМ',
+    'V': 'ВИКТОР',
+    'W': 'ВИСКИ',
+    'X': 'ЭКС-РЭЙ',
+    'Y': 'ЯНКИ',
+    'Z': 'ЗУЛУ',
+}
+
+# Английские варианты (на случай если кто-то прислал ALPHA/BRAVO и т.п.)
+NATO_EN = {
+    'A': 'ALPHA',
+    'B': 'BRAVO',
+    'C': 'CHARLIE',
+    'D': 'DELTA',
+    'E': 'ECHO',
+    'F': 'FOXTROT',
+    'G': 'GOLF',
+    'H': 'HOTEL',
+    'I': 'INDIA',
+    'J': 'JULIETT',
+    'K': 'KILO',
+    'L': 'LIMA',
+    'M': 'MIKE',
+    'N': 'NOVEMBER',
+    'O': 'OSCAR',
+    'P': 'PAPA',
+    'Q': 'QUEBEC',
+    'R': 'ROMEO',
+    'S': 'SIERRA',
+    'T': 'TANGO',
+    'U': 'UNIFORM',
+    'V': 'VICTOR',
+    'W': 'WHISKEY',
+    'X': 'X-RAY',
+    'Y': 'YANKEE',
+    'Z': 'ZULU',
+}
+
+# цифры (радио-озвучка)
+NATO_NUM_EN = {
+    '0': 'ZERO',
+    '1': 'ONE',
+    '2': 'TWO',
+    '3': 'THREE',
+    '4': 'FOUR',
+    '5': 'FIVE',
+    '6': 'SIX',
+    '7': 'SEVEN',
+    '8': 'EIGHT',
+    '9': 'NINER',
+}
+NATO_NUM_RU = {
+    '0': 'ЗИРО',
+    '1': 'УАН',
+    '2': 'ТУ',
+    '3': 'СРИ',
+    '4': 'ФОР',
+    '5': 'ФАЙФ',
+    '6': 'СИКС',
+    '7': 'СЕВЕН',
+    '8': 'ЭЙТ',
+    '9': 'НАЙНЕР',
+}
+
+# reverse: принимаем несколько написаний
+REVERSE_NATO: Dict[str, str] = {}
+for k, v in NATO_RU.items():
+    REVERSE_NATO[v] = k
+for k, v in NATO_EN.items():
+    REVERSE_NATO[v] = k
+for k, v in NATO_NUM_EN.items():
+    REVERSE_NATO[v] = k
+for k, v in NATO_NUM_RU.items():
+    REVERSE_NATO[v] = k
+
+# -----------------------------
+# разделители
+# -----------------------------
+WORD_SEP = " | "
+CHAR_SEP = " "
+
+
+# -----------------------------
+# helpers
+# -----------------------------
+
+def _norm_token(t: str) -> str:
+    return t.strip().upper().replace("Ё", "Е")
 
 
 def encode_morse(text: str) -> str:
     result = []
-    for word in text.upper().split(' '):
+    for word in text.upper().split():
         encoded_word = []
-        for char in word:
-            if char in MORSE_TABLE:
-                encoded_word.append(MORSE_TABLE[char])
-            else:
-                encoded_word.append(char)
+        for ch in word:
+            code = MORSE_TABLE.get(ch)
+            encoded_word.append(code if code else ch)
         result.append(CHAR_SEP.join(encoded_word))
     return WORD_SEP.join(result)
 
 
 def decode_morse(text: str) -> str:
     result = []
-    words = text.split(WORD_SEP)
-    for word in words:
+    for word in text.split(WORD_SEP):
         decoded_word = []
-        for symbol in word.strip().split(CHAR_SEP):
-            symbol = symbol.strip()
-            if not symbol:
+        for sym in word.strip().split(CHAR_SEP):
+            sym = sym.strip()
+            if not sym:
                 continue
-            if symbol in REVERSE_MORSE:
-                decoded_word.append(REVERSE_MORSE[symbol])
-            else:
-                decoded_word.append(symbol)
-        result.append(''.join(decoded_word))
-    return ' '.join(result)
+            decoded_word.append(REVERSE_MORSE.get(sym, sym))
+        result.append("".join(decoded_word))
+    return " ".join(result)
 
 
 def is_morse(text: str) -> bool:
-    stripped = text.strip()
-    if not stripped:
+    s = text.strip()
+    if not s:
         return False
-    # Морзянка содержит только '.', '-', ' ', '|'
-    return all(c in '.- |' for c in stripped) and ('.' in stripped or '-' in stripped)
+    return all(c in ".- |" for c in s) and ("." in s or "-" in s)
 
 
-# ПЛАГИН
+def encode_nato(text: str) -> str:
+    result = []
+    for word in text.upper().split():
+        encoded_word = []
+        for ch in word:
+            if ch in NATO_RU:
+                encoded_word.append(NATO_RU[ch])
+            elif ch in NATO_NUM_RU:
+                encoded_word.append(NATO_NUM_RU[ch])
+            else:
+                encoded_word.append(ch)
+        result.append(CHAR_SEP.join(encoded_word))
+    return WORD_SEP.join(result)
+
+
+def decode_nato(text: str) -> str:
+    result = []
+    for word in text.split(WORD_SEP):
+        decoded_word = []
+        for tok in word.strip().split(CHAR_SEP):
+            tok = _norm_token(tok)
+            if not tok:
+                continue
+            decoded_word.append(REVERSE_NATO.get(tok, tok))
+        result.append("".join(decoded_word))
+    return " ".join(result)
+
+
+def is_nato(text: str) -> bool:
+    s = text.strip()
+    if not s:
+        return False
+    # грубая эвристика: много токенов из NATO
+    tokens = [_norm_token(t) for t in s.replace("|", " ").split() if t.strip()]
+    if not tokens:
+        return False
+    known = sum(1 for t in tokens if t in REVERSE_NATO)
+    return known >= 2 and known >= max(2, len(tokens) // 2)
+
+
+def detect_codec(text: str) -> Optional[str]:
+    if is_morse(text):
+        return "morse"
+    if is_nato(text):
+        return "nato"
+    return None
+
+
+def encode_by_codec(codec: str, text: str) -> str:
+    return encode_morse(text) if codec == "morse" else encode_nato(text)
+
+
+def decode_by_codec(codec: str, text: str) -> str:
+    return decode_morse(text) if codec == "morse" else decode_nato(text)
+
+
+def parse_prefix(original: str) -> Tuple[Optional[str], str]:
+    """
+    Префиксы (без учёта регистра):
+      !m  -> Morse
+      !n  -> NATO
+      !raw -> не кодировать (префикс удаляется)
+    Возвращает (codec|None, text_without_prefix)
+    """
+    s = original.lstrip()
+    low = s.lower()
+
+    if low.startswith("!raw "):
+        return ("raw", s[5:])  # remove "!raw "
+    if low.startswith("!m "):
+        return ("morse", s[3:])  # remove "!m "
+    if low.startswith("!n "):
+        return ("nato", s[3:])  # remove "!n "
+    return (None, original)
+
+
+def get_drawer_menu_type() -> Optional[Any]:
+    # Под разные версии API: пробуем несколько имён
+    candidates = [
+        "LEFT_MENU",
+        "LEFT_DRAWER",
+        "DRAWER_MENU",
+        "MAIN_MENU",
+        "MAIN_DRAWER",
+        "SIDE_MENU",
+        "NAVIGATION_DRAWER",
+    ]
+    for name in candidates:
+        if hasattr(MenuItemType, name):
+            return getattr(MenuItemType, name)
+    return None
+
+
+# -----------------------------
+# Plugin
+# -----------------------------
 
 class MorseCodePlugin(BasePlugin):
 
     def on_plugin_load(self):
         self.add_on_send_message_hook()
+
+        # Контекстное меню сообщения: Decode
         self.add_menu_item(
             MenuItemData(
                 menu_type=MenuItemType.MESSAGE_CONTEXT_MENU,
-                text="Decode Morse",
-                subtext="Расшифровать морзянку",
+                text="Decode",
+                subtext="Decode Morse / NATO",
                 icon="msg_info",
-                item_id="morse_decode_btn",
+                item_id="morsegram_decode_btn",
                 on_click=self._on_decode_click,
             )
         )
-        self.log("MorseCode plugin loaded!")
+
+        # Левое меню (drawer) — если поддерживается вашей версией MenuItemType
+        drawer_type = get_drawer_menu_type()
+        if drawer_type is not None:
+            self.add_menu_item(
+                MenuItemData(
+                    menu_type=drawer_type,
+                    text="Morsegram Settings",
+                    subtext="Morse / NATO modes",
+                    icon="settings",
+                    item_id="morsegram_left_menu",
+                    on_click=self._on_left_menu_click,
+                )
+            )
+
+        self.log("Morsegram plugin loaded!")
 
     def on_plugin_unload(self):
-        self.log("MorseCode plugin unloaded!")
+        self.log("Morsegram plugin unloaded!")
 
-    # Хук отправки: заменяем текст на морзянку
+    # -------------------------
+    # Send hook
+    # -------------------------
 
     def on_send_message_hook(self, account: int, params: Any) -> HookResult:
         if not self.get_setting("enabled", True):
             return HookResult()
 
-        if not hasattr(params, 'message') or not isinstance(params.message, str):
+        if not hasattr(params, "message") or not isinstance(params.message, str):
             return HookResult()
 
-        original = params.message.strip()
-        if not original:
+        original = params.message
+        trimmed = original.strip()
+        if not trimmed:
             return HookResult()
 
-        encoded = encode_morse(original)
-        self.log(f"Morse encode: '{original}' -> '{encoded}'")
+        # Не перекодировать уже закодированное (опционально)
+        if self.get_setting("skip_if_encoded", True):
+            if detect_codec(trimmed) in ("morse", "nato"):
+                return HookResult()
+
+        # Режимы:
+        # 1) always_encode = True  -> кодируем всегда (но префиксы могут переопределить)
+        # 2) prefix_only = True    -> кодируем ТОЛЬКО если есть !m/!n (или !raw чтобы явно пропустить)
+        prefix_only = self.get_setting("prefix_only", False)
+        default_codec = "nato" if self.get_setting("default_nato", False) else "morse"
+
+        pref_codec, no_pref_text = parse_prefix(original)
+
+        # !raw — удалить префикс и НЕ кодировать
+        if pref_codec == "raw":
+            params.message = no_pref_text
+            return HookResult(strategy=HookStrategy.MODIFY, params=params)
+
+        # prefix-only: без префикса ничего не делаем
+        if prefix_only and pref_codec is None:
+            return HookResult()
+
+        codec = pref_codec if pref_codec in ("morse", "nato") else default_codec
+        payload = no_pref_text if pref_codec else original
+
+        encoded = encode_by_codec(codec, payload.strip())
+        self.log(f"Encode[{codec}]: '{payload.strip()}' -> '{encoded}'")
         params.message = encoded
         return HookResult(strategy=HookStrategy.MODIFY, params=params)
 
-    # Обработчик нажатия "Decode Morse" в контекстном меню
+    # -------------------------
+    # Decode menu action
+    # -------------------------
 
     def _on_decode_click(self, context: Dict[str, Any]):
         message = context.get("message")
         if not message:
             return
 
-        text = str(message.messageText) if message.messageText else ""
-
+        text = str(message.messageText) if getattr(message, "messageText", None) else ""
         if not text.strip():
             run_on_ui_thread(lambda: BulletinHelper.show_error("Message is empty"))
             return
 
-        if not is_morse(text):
-            run_on_ui_thread(lambda: BulletinHelper.show_error("This doesn't look like Morse code"))
+        codec = detect_codec(text)
+        if not codec:
+            run_on_ui_thread(lambda: BulletinHelper.show_error("Not Morse / NATO text"))
             return
 
-        decoded = decode_morse(text)
-        self.log(f"Morse decode: '{text}' -> '{decoded}'")
+        decoded = decode_by_codec(codec, text)
+        self.log(f"Decode[{codec}]: '{text}' -> '{decoded}'")
 
         def show_dialog():
             fragment = get_last_fragment()
@@ -158,25 +424,94 @@ class MorseCodePlugin(BasePlugin):
                 return
 
             dialog = AlertDialogBuilder(activity)
-            dialog.set_title("Morse Code")
+            dialog.set_title("Morsegram")
             dialog.set_message(
-                "Morse:\n" + text + "\n\nDecoded:\n" + decoded
+                f"Detected: {codec}\n\nEncoded:\n{text}\n\nDecoded:\n{decoded}\n\n"
+                "Tips:\n"
+                "• Prefixes: !m  (Morse), !n  (NATO), !raw (send as-is)\n"
+                "• Enable 'Prefix-only' mode to encode only when you use prefixes."
             )
             dialog.set_positive_button("OK", lambda d, w: d.dismiss())
             dialog.show()
 
         run_on_ui_thread(show_dialog)
 
-    # Настройки
+    # -------------------------
+    # Left menu action
+    # -------------------------
+
+    def _on_left_menu_click(self, _context: Dict[str, Any]):
+        """
+        Идеально: открыть встроенный экран настроек плагина.
+        Если в вашей сборке BasePlugin нет open_settings(), показываем help-диалог.
+        """
+        # Пытаемся открыть экран настроек, если framework это поддерживает
+        try:
+            if hasattr(self, "open_settings"):
+                self.open_settings()
+                return
+        except Exception:
+            pass
+
+        def show_help():
+            fragment = get_last_fragment()
+            if not fragment or not (activity := fragment.getParentActivity()):
+                return
+
+            enabled = self.get_setting("enabled", True)
+            prefix_only = self.get_setting("prefix_only", False)
+            default_codec = "NATO" if self.get_setting("default_nato", False) else "Morse"
+
+            dialog = AlertDialogBuilder(activity)
+            dialog.set_title("Morsegram Settings")
+            dialog.set_message(
+                f"Enabled: {enabled}\n"
+                f"Mode: {'Prefix-only' if prefix_only else 'Always encode'}\n"
+                f"Default codec: {default_codec}\n\n"
+                "Prefixes:\n"
+                "• !m  hello  -> Morse\n"
+                "• !n  hello  -> NATO (Альфа/Браво/…)\n"
+                "• !raw text  -> send without encoding\n\n"
+                "If you want a full settings screen here, update BasePlugin to a build that supports open_settings()."
+            )
+            dialog.set_positive_button("OK", lambda d, w: d.dismiss())
+            dialog.show()
+
+        run_on_ui_thread(show_help)
+
+    # -------------------------
+    # Settings UI
+    # -------------------------
 
     def create_settings(self):
         return [
-            Header(text="Morse Code"),
+            Header(text="Morsegram"),
             Switch(
                 key="enabled",
-                text="Encode outgoing messages",
+                text="Enable encoding",
                 default=True,
-                subtext="Automatically converts your messages to Morse code before sending",
+                subtext="Encodes outgoing messages (Morse / NATO)",
                 icon="msg_text",
+            ),
+            Switch(
+                key="prefix_only",
+                text="Prefix-only mode",
+                default=False,
+                subtext="Encode only if message starts with !m or !n (use !raw to bypass)",
+                icon="msg_info",
+            ),
+            Switch(
+                key="default_nato",
+                text="Default codec: NATO (Alpha/Bravo/Charlie)",
+                default=False,
+                subtext="If disabled, default codec is Morse",
+                icon="msg_info",
+            ),
+            Switch(
+                key="skip_if_encoded",
+                text="Skip if already encoded",
+                default=True,
+                subtext="Prevents double-encoding if message looks like Morse/NATO already",
+                icon="msg_info",
             ),
         ]
