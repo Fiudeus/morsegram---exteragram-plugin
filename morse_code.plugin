@@ -8,14 +8,14 @@ from typing import Dict, Any, Optional, Tuple
 
 __name__ = "Morsegram"
 __description__ = "Encodes outgoing messages (Morse / NATO phonetic). Long-tap any message to decode back."
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __id__ = "morsegram"
-__author__ = "@fiudeus"
+__author__ = "@fiudeus @Atom216"
 __min_version__ = "11.12.0"
 
 
 # -----------------------------
-# Morse (фикс: без хвостовых пробелов в кодах пунктуации)
+# Morse
 # -----------------------------
 
 MORSE_TABLE = {
@@ -28,7 +28,7 @@ MORSE_TABLE = {
     'U': '..-',   'V': '...-',  'W': '.--',   'X': '-..-',
     'Y': '-.--',  'Z': '--..',
 
-    # Cyrillic (как было)
+    # Cyrillic
     'А': '.-',    'Б': '-...',  'В': '.--',   'Г': '--.',
     'Д': '-..',   'Е': '.',     'Ё': '.',     'Ж': '...-',
     'З': '--..',  'И': '..',    'Й': '.---',  'К': '-.-',
@@ -44,7 +44,7 @@ MORSE_TABLE = {
     '4': '....-', '5': '.....', '6': '-....', '7': '--...',
     '8': '---..', '9': '----.',
 
-    # punctuation (стандарт)
+    # punctuation
     '.': '.-.-.-',
     ',': '--..--',
     ';': '-.-.-.',
@@ -65,102 +65,40 @@ MORSE_TABLE = {
     '$': '...-..-',
 }
 
-# строим обратную таблицу со strip() чтобы не ловить баги пробелов
 REVERSE_MORSE = {v.strip(): k for k, v in MORSE_TABLE.items()}
 
 
 # -----------------------------
-# NATO phonetic (Альфа Браво Чарли…)
-# + декод понимает и RU, и EN варианты
+# NATO (Альфа/Браво/…)
 # -----------------------------
 
-# Русские названия (как чаще пишут)
 NATO_RU = {
-    'A': 'АЛЬФА',
-    'B': 'БРАВО',
-    'C': 'ЧАРЛИ',
-    'D': 'ДЕЛЬТА',
-    'E': 'ЭХО',
-    'F': 'ФОКСТРОТ',
-    'G': 'ГОЛЬФ',
-    'H': 'ХОТЕЛ',
-    'I': 'ИНДИЯ',
-    'J': 'ДЖУЛЬЕТ',
-    'K': 'КИЛО',
-    'L': 'ЛИМА',
-    'M': 'МАЙК',
-    'N': 'НОВЕМБЕР',
-    'O': 'ОСКАР',
-    'P': 'ПАПА',
-    'Q': 'КВЕБЕК',
-    'R': 'РОМЕО',
-    'S': 'СЬЕРРА',
-    'T': 'ТАНГО',
-    'U': 'ЮНИФОРМ',
-    'V': 'ВИКТОР',
-    'W': 'ВИСКИ',
-    'X': 'ЭКС-РЭЙ',
-    'Y': 'ЯНКИ',
-    'Z': 'ЗУЛУ',
+    'A': 'АЛЬФА',   'B': 'БРАВО',   'C': 'ЧАРЛИ',   'D': 'ДЕЛЬТА',
+    'E': 'ЭХО',     'F': 'ФОКСТРОТ','G': 'ГОЛЬФ',   'H': 'ХОТЕЛ',
+    'I': 'ИНДИЯ',   'J': 'ДЖУЛЬЕТ', 'K': 'КИЛО',    'L': 'ЛИМА',
+    'M': 'МАЙК',    'N': 'НОВЕМБЕР','O': 'ОСКАР',   'P': 'ПАПА',
+    'Q': 'КВЕБЕК',  'R': 'РОМЕО',   'S': 'СЬЕРРА',  'T': 'ТАНГО',
+    'U': 'ЮНИФОРМ', 'V': 'ВИКТОР',  'W': 'ВИСКИ',   'X': 'ЭКС-РЭЙ',
+    'Y': 'ЯНКИ',    'Z': 'ЗУЛУ',
 }
 
-# Английские варианты (на случай если кто-то прислал ALPHA/BRAVO и т.п.)
 NATO_EN = {
-    'A': 'ALPHA',
-    'B': 'BRAVO',
-    'C': 'CHARLIE',
-    'D': 'DELTA',
-    'E': 'ECHO',
-    'F': 'FOXTROT',
-    'G': 'GOLF',
-    'H': 'HOTEL',
-    'I': 'INDIA',
-    'J': 'JULIETT',
-    'K': 'KILO',
-    'L': 'LIMA',
-    'M': 'MIKE',
-    'N': 'NOVEMBER',
-    'O': 'OSCAR',
-    'P': 'PAPA',
-    'Q': 'QUEBEC',
-    'R': 'ROMEO',
-    'S': 'SIERRA',
-    'T': 'TANGO',
-    'U': 'UNIFORM',
-    'V': 'VICTOR',
-    'W': 'WHISKEY',
-    'X': 'X-RAY',
-    'Y': 'YANKEE',
-    'Z': 'ZULU',
+    'A': 'ALPHA', 'B': 'BRAVO', 'C': 'CHARLIE', 'D': 'DELTA', 'E': 'ECHO',
+    'F': 'FOXTROT', 'G': 'GOLF', 'H': 'HOTEL', 'I': 'INDIA', 'J': 'JULIETT',
+    'K': 'KILO', 'L': 'LIMA', 'M': 'MIKE', 'N': 'NOVEMBER', 'O': 'OSCAR',
+    'P': 'PAPA', 'Q': 'QUEBEC', 'R': 'ROMEO', 'S': 'SIERRA', 'T': 'TANGO',
+    'U': 'UNIFORM', 'V': 'VICTOR', 'W': 'WHISKEY', 'X': 'X-RAY', 'Y': 'YANKEE', 'Z': 'ZULU',
 }
 
-# цифры (радио-озвучка)
 NATO_NUM_EN = {
-    '0': 'ZERO',
-    '1': 'ONE',
-    '2': 'TWO',
-    '3': 'THREE',
-    '4': 'FOUR',
-    '5': 'FIVE',
-    '6': 'SIX',
-    '7': 'SEVEN',
-    '8': 'EIGHT',
-    '9': 'NINER',
+    '0': 'ZERO', '1': 'ONE', '2': 'TWO', '3': 'THREE', '4': 'FOUR',
+    '5': 'FIVE', '6': 'SIX', '7': 'SEVEN', '8': 'EIGHT', '9': 'NINER',
 }
 NATO_NUM_RU = {
-    '0': 'ЗИРО',
-    '1': 'УАН',
-    '2': 'ТУ',
-    '3': 'СРИ',
-    '4': 'ФОР',
-    '5': 'ФАЙФ',
-    '6': 'СИКС',
-    '7': 'СЕВЕН',
-    '8': 'ЭЙТ',
-    '9': 'НАЙНЕР',
+    '0': 'ЗИРО', '1': 'УАН', '2': 'ТУ', '3': 'СРИ', '4': 'ФОР',
+    '5': 'ФАЙФ', '6': 'СИКС', '7': 'СЕВЕН', '8': 'ЭЙТ', '9': 'НАЙНЕР',
 }
 
-# reverse: принимаем несколько написаний
 REVERSE_NATO: Dict[str, str] = {}
 for k, v in NATO_RU.items():
     REVERSE_NATO[v] = k
@@ -171,8 +109,35 @@ for k, v in NATO_NUM_EN.items():
 for k, v in NATO_NUM_RU.items():
     REVERSE_NATO[v] = k
 
+
 # -----------------------------
-# разделители
+# RU -> LAT translit for NATO mode
+# (сделано максимально однозначно: Й->J, Ы->Y, Э->EH, Х->KH)
+# -----------------------------
+
+RU2LAT = {
+    'А': 'A',  'Б': 'B',  'В': 'V',   'Г': 'G',   'Д': 'D',
+    'Е': 'E',  'Ё': 'YO', 'Ж': 'ZH',  'З': 'Z',   'И': 'I',
+    'Й': 'J',  'К': 'K',  'Л': 'L',   'М': 'M',   'Н': 'N',
+    'О': 'O',  'П': 'P',  'Р': 'R',   'С': 'S',   'Т': 'T',
+    'У': 'U',  'Ф': 'F',  'Х': 'KH',  'Ц': 'TS',  'Ч': 'CH',
+    'Ш': 'SH', 'Щ': 'SHCH','Ъ': '',   'Ы': 'Y',   'Ь': '',
+    'Э': 'EH', 'Ю': 'YU', 'Я': 'YA',
+}
+
+def translit_ru_to_lat(text: str) -> str:
+    out = []
+    for ch in text:
+        up = ch.upper()
+        if up in RU2LAT:
+            out.append(RU2LAT[up])
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+# -----------------------------
+# separators
 # -----------------------------
 WORD_SEP = " | "
 CHAR_SEP = " "
@@ -184,6 +149,20 @@ CHAR_SEP = " "
 
 def _norm_token(t: str) -> str:
     return t.strip().upper().replace("Ё", "Е")
+
+
+def _bulletin_ok(msg: str):
+    # на разных сборках могут быть разные методы
+    if hasattr(BulletinHelper, "show_success"):
+        run_on_ui_thread(lambda: BulletinHelper.show_success(msg))
+    elif hasattr(BulletinHelper, "show_info"):
+        run_on_ui_thread(lambda: BulletinHelper.show_info(msg))
+    else:
+        run_on_ui_thread(lambda: BulletinHelper.show_error(msg))
+
+
+def _bulletin_err(msg: str):
+    run_on_ui_thread(lambda: BulletinHelper.show_error(msg))
 
 
 def encode_morse(text: str) -> str:
@@ -249,7 +228,6 @@ def is_nato(text: str) -> bool:
     s = text.strip()
     if not s:
         return False
-    # грубая эвристика: много токенов из NATO
     tokens = [_norm_token(t) for t in s.replace("|", " ").split() if t.strip()]
     if not tokens:
         return False
@@ -275,26 +253,24 @@ def decode_by_codec(codec: str, text: str) -> str:
 
 def parse_prefix(original: str) -> Tuple[Optional[str], str]:
     """
-    Префиксы (без учёта регистра):
-      !m  -> Morse
-      !n  -> NATO
-      !raw -> не кодировать (префикс удаляется)
-    Возвращает (codec|None, text_without_prefix)
+    Prefixes:
+      !m   -> Morse
+      !n   -> NATO
+      !raw -> do not encode (prefix removed)
     """
     s = original.lstrip()
     low = s.lower()
 
     if low.startswith("!raw "):
-        return ("raw", s[5:])  # remove "!raw "
+        return ("raw", s[5:])
     if low.startswith("!m "):
-        return ("morse", s[3:])  # remove "!m "
+        return ("morse", s[3:])
     if low.startswith("!n "):
-        return ("nato", s[3:])  # remove "!n "
+        return ("nato", s[3:])
     return (None, original)
 
 
 def get_drawer_menu_type() -> Optional[Any]:
-    # Под разные версии API: пробуем несколько имён
     candidates = [
         "LEFT_MENU",
         "LEFT_DRAWER",
@@ -319,7 +295,7 @@ class MorseCodePlugin(BasePlugin):
     def on_plugin_load(self):
         self.add_on_send_message_hook()
 
-        # Контекстное меню сообщения: Decode
+        # Context menu: Decode
         self.add_menu_item(
             MenuItemData(
                 menu_type=MenuItemType.MESSAGE_CONTEXT_MENU,
@@ -331,17 +307,27 @@ class MorseCodePlugin(BasePlugin):
             )
         )
 
-        # Левое меню (drawer) — если поддерживается вашей версией MenuItemType
+        # Left drawer items (если поддерживаются)
         drawer_type = get_drawer_menu_type()
         if drawer_type is not None:
+            self.add_menu_item(
+                MenuItemData(
+                    menu_type=drawer_type,
+                    text="Morsegram: ON/OFF",
+                    subtext="Toggle plugin",
+                    icon="settings",
+                    item_id="morsegram_toggle",
+                    on_click=self._on_left_toggle_click,
+                )
+            )
             self.add_menu_item(
                 MenuItemData(
                     menu_type=drawer_type,
                     text="Morsegram Settings",
                     subtext="Morse / NATO modes",
                     icon="settings",
-                    item_id="morsegram_left_menu",
-                    on_click=self._on_left_menu_click,
+                    item_id="morsegram_settings",
+                    on_click=self._on_left_settings_click,
                 )
             )
 
@@ -366,38 +352,39 @@ class MorseCodePlugin(BasePlugin):
         if not trimmed:
             return HookResult()
 
-        # Не перекодировать уже закодированное (опционально)
+        # Skip already encoded
         if self.get_setting("skip_if_encoded", True):
             if detect_codec(trimmed) in ("morse", "nato"):
                 return HookResult()
 
-        # Режимы:
-        # 1) always_encode = True  -> кодируем всегда (но префиксы могут переопределить)
-        # 2) prefix_only = True    -> кодируем ТОЛЬКО если есть !m/!n (или !raw чтобы явно пропустить)
         prefix_only = self.get_setting("prefix_only", False)
         default_codec = "nato" if self.get_setting("default_nato", False) else "morse"
+        ru_to_nato = self.get_setting("ru_to_nato", False)
 
         pref_codec, no_pref_text = parse_prefix(original)
 
-        # !raw — удалить префикс и НЕ кодировать
         if pref_codec == "raw":
             params.message = no_pref_text
             return HookResult(strategy=HookStrategy.MODIFY, params=params)
 
-        # prefix-only: без префикса ничего не делаем
         if prefix_only and pref_codec is None:
             return HookResult()
 
         codec = pref_codec if pref_codec in ("morse", "nato") else default_codec
         payload = no_pref_text if pref_codec else original
+        payload = payload.strip()
 
-        encoded = encode_by_codec(codec, payload.strip())
-        self.log(f"Encode[{codec}]: '{payload.strip()}' -> '{encoded}'")
+        # RU -> NATO mode
+        if codec == "nato" and ru_to_nato:
+            payload = translit_ru_to_lat(payload)
+
+        encoded = encode_by_codec(codec, payload)
+        self.log(f"Encode[{codec}]: '{payload}' -> '{encoded}'")
         params.message = encoded
         return HookResult(strategy=HookStrategy.MODIFY, params=params)
 
     # -------------------------
-    # Decode menu action
+    # Decode action
     # -------------------------
 
     def _on_decode_click(self, context: Dict[str, Any]):
@@ -407,12 +394,12 @@ class MorseCodePlugin(BasePlugin):
 
         text = str(message.messageText) if getattr(message, "messageText", None) else ""
         if not text.strip():
-            run_on_ui_thread(lambda: BulletinHelper.show_error("Message is empty"))
+            _bulletin_err("Message is empty")
             return
 
         codec = detect_codec(text)
         if not codec:
-            run_on_ui_thread(lambda: BulletinHelper.show_error("Not Morse / NATO text"))
+            _bulletin_err("Not Morse / NATO text")
             return
 
         decoded = decode_by_codec(codec, text)
@@ -426,10 +413,9 @@ class MorseCodePlugin(BasePlugin):
             dialog = AlertDialogBuilder(activity)
             dialog.set_title("Morsegram")
             dialog.set_message(
-                f"Detected: {codec}\n\nEncoded:\n{text}\n\nDecoded:\n{decoded}\n\n"
-                "Tips:\n"
-                "• Prefixes: !m  (Morse), !n  (NATO), !raw (send as-is)\n"
-                "• Enable 'Prefix-only' mode to encode only when you use prefixes."
+                f"Detected: {codec}\n\n"
+                f"Encoded:\n{text}\n\n"
+                f"Decoded:\n{decoded}"
             )
             dialog.set_positive_button("OK", lambda d, w: d.dismiss())
             dialog.show()
@@ -437,15 +423,31 @@ class MorseCodePlugin(BasePlugin):
         run_on_ui_thread(show_dialog)
 
     # -------------------------
-    # Left menu action
+    # Left menu: toggle
     # -------------------------
 
-    def _on_left_menu_click(self, _context: Dict[str, Any]):
-        """
-        Идеально: открыть встроенный экран настроек плагина.
-        Если в вашей сборке BasePlugin нет open_settings(), показываем help-диалог.
-        """
-        # Пытаемся открыть экран настроек, если framework это поддерживает
+    def _on_left_toggle_click(self, _context: Dict[str, Any]):
+        current = self.get_setting("enabled", True)
+        new_value = not current
+
+        ok = False
+        try:
+            if hasattr(self, "set_setting"):
+                self.set_setting("enabled", new_value)
+                ok = True
+        except Exception:
+            ok = False
+
+        if ok:
+            _bulletin_ok(f"Morsegram {'enabled' if new_value else 'disabled'}")
+        else:
+            _bulletin_err("Can't toggle (set_setting not available in this build)")
+
+    # -------------------------
+    # Left menu: open settings / fallback
+    # -------------------------
+
+    def _on_left_settings_click(self, _context: Dict[str, Any]):
         try:
             if hasattr(self, "open_settings"):
                 self.open_settings()
@@ -453,31 +455,18 @@ class MorseCodePlugin(BasePlugin):
         except Exception:
             pass
 
-        def show_help():
+        def show_dialog():
             fragment = get_last_fragment()
             if not fragment or not (activity := fragment.getParentActivity()):
                 return
 
-            enabled = self.get_setting("enabled", True)
-            prefix_only = self.get_setting("prefix_only", False)
-            default_codec = "NATO" if self.get_setting("default_nato", False) else "Morse"
-
             dialog = AlertDialogBuilder(activity)
-            dialog.set_title("Morsegram Settings")
-            dialog.set_message(
-                f"Enabled: {enabled}\n"
-                f"Mode: {'Prefix-only' if prefix_only else 'Always encode'}\n"
-                f"Default codec: {default_codec}\n\n"
-                "Prefixes:\n"
-                "• !m  hello  -> Morse\n"
-                "• !n  hello  -> NATO (Альфа/Браво/…)\n"
-                "• !raw text  -> send without encoding\n\n"
-                "If you want a full settings screen here, update BasePlugin to a build that supports open_settings()."
-            )
+            dialog.set_title("Morsegram")
+            dialog.set_message("Open plugin settings in the Plugins section.")
             dialog.set_positive_button("OK", lambda d, w: d.dismiss())
             dialog.show()
 
-        run_on_ui_thread(show_help)
+        run_on_ui_thread(show_dialog)
 
     # -------------------------
     # Settings UI
@@ -505,6 +494,13 @@ class MorseCodePlugin(BasePlugin):
                 text="Default codec: NATO (Alpha/Bravo/Charlie)",
                 default=False,
                 subtext="If disabled, default codec is Morse",
+                icon="msg_info",
+            ),
+            Switch(
+                key="ru_to_nato",
+                text="RU → NATO mode",
+                default=False,
+                subtext="Transliterates Russian letters to Latin before NATO encoding (e.g. ПРИВЕТ -> PRIVET -> NATO)",
                 icon="msg_info",
             ),
             Switch(
