@@ -10,7 +10,7 @@ __name__ = "Morsegram"
 __description__ = "Encodes outgoing messages (Morse / NATO phonetic). Long-tap any message to decode back."
 __version__ = "1.2.0"
 __id__ = "morsegram"
-__author__ = "@fiudeus @Atom216"
+__author__ = "@fiudeus @ntfepsilon"
 __min_version__ = "11.12.0"
 
 
