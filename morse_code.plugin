@@ -7,19 +7,23 @@ from ui.settings import Header, Switch
 from typing import Dict, Any, Optional, Tuple
 
 __name__ = "Morsegram"
-__description__ = "Encodes outgoing messages (Morse / NATO phonetic). Long-tap any message to decode back."
-__version__ = "1.2.0"
+__description__ = "Encodes outgoing messages. Long-tap any message to decode back."
+__version__ = "1.4.0"
 __id__ = "morsegram"
-__author__ = "@fiudeus @ntfepsilon"
-__min_version__ = "11.12.0"
+__author__ = "@fiudeus, @ntfepsilon"
+__min_version__ = "12.0.0"
 
+# Константы
 
-# -----------------------------
-# Morse
-# -----------------------------
+WORD_SEP = " | "
+CHAR_SEP = " "
+MORSE_RU_MARK = "........."
+MORSE_EN_MARK = "---------"
+
+# Таблица морзе
 
 MORSE_TABLE = {
-    # Latin
+    # Латиница
     'A': '.-',    'B': '-...',  'C': '-.-.',  'D': '-..',
     'E': '.',     'F': '..-.',  'G': '--.',   'H': '....',
     'I': '..',    'J': '.---',  'K': '-.-',   'L': '.-..',
@@ -28,7 +32,7 @@ MORSE_TABLE = {
     'U': '..-',   'V': '...-',  'W': '.--',   'X': '-..-',
     'Y': '-.--',  'Z': '--..',
 
-    # Cyrillic
+    # Кирилица
     'А': '.-',    'Б': '-...',  'В': '.--',   'Г': '--.',
     'Д': '-..',   'Е': '.',     'Ё': '.',     'Ж': '...-',
     'З': '--..',  'И': '..',    'Й': '.---',  'К': '-.-',
@@ -39,12 +43,12 @@ MORSE_TABLE = {
     'Ы': '-.--',  'Ь': '-..-',  'Э': '..-..', 'Ю': '..--.',
     'Я': '.-.-',
 
-    # digits
+    # Цифры
     '0': '-----', '1': '.----', '2': '..---', '3': '...--',
     '4': '....-', '5': '.....', '6': '-....', '7': '--...',
     '8': '---..', '9': '----.',
 
-    # punctuation
+    # Пукнтуация
     '.': '.-.-.-',
     ',': '--..--',
     ';': '-.-.-.',
@@ -65,12 +69,22 @@ MORSE_TABLE = {
     '$': '...-..-',
 }
 
-REVERSE_MORSE = {v.strip(): k for k, v in MORSE_TABLE.items()}
+REVERSE_MORSE_RU: Dict[str, str] = {}
+REVERSE_MORSE_EN: Dict[str, str] = {}
 
+for ch, code_raw in MORSE_TABLE.items():
+    code = code_raw.strip()
+    is_cyr = ("А" <= ch <= "Я") or ch in ("Ё",)
+    is_lat = ("A" <= ch <= "Z")
+    if is_cyr:
+        # Предпочитаем букву "Е"
+        if code not in REVERSE_MORSE_RU or (REVERSE_MORSE_RU.get(code) == "Ё" and ch == "Е"):
+            REVERSE_MORSE_RU[code] = ch
+    if is_lat:
+        if code not in REVERSE_MORSE_EN:
+            REVERSE_MORSE_EN[code] = ch
 
-# -----------------------------
 # NATO (Альфа/Браво/…)
-# -----------------------------
 
 NATO_RU = {
     'A': 'АЛЬФА',   'B': 'БРАВО',   'C': 'ЧАРЛИ',   'D': 'ДЕЛЬТА',
@@ -109,11 +123,7 @@ for k, v in NATO_NUM_EN.items():
 for k, v in NATO_NUM_RU.items():
     REVERSE_NATO[v] = k
 
-
-# -----------------------------
-# RU -> LAT translit for NATO mode
-# (сделано максимально однозначно: Й->J, Ы->Y, Э->EH, Х->KH)
-# -----------------------------
+# RU -> LAT translit for NATO mode (сделано максимально однозначно: Й->J, Ы->Y, Э->EH, Х->KH)
 
 RU2LAT = {
     'А': 'A',  'Б': 'B',  'В': 'V',   'Г': 'G',   'Д': 'D',
@@ -136,19 +146,19 @@ def translit_ru_to_lat(text: str) -> str:
     return "".join(out)
 
 
-# -----------------------------
-# separators
-# -----------------------------
-WORD_SEP = " | "
-CHAR_SEP = " "
 
 
-# -----------------------------
-# helpers
-# -----------------------------
+# Функции для UI и кодировок
 
 def _norm_token(t: str) -> str:
     return t.strip().upper().replace("Ё", "Е")
+
+
+def _has_cyrillic(text: str) -> bool:
+    for ch in text:
+        if ("А" <= ch <= "Я") or ("а" <= ch <= "я") or ch in ("Ё", "ё"):
+            return True
+    return False
 
 
 def _bulletin_ok(msg: str):
@@ -166,6 +176,7 @@ def _bulletin_err(msg: str):
 
 
 def encode_morse(text: str) -> str:
+    marker = MORSE_RU_MARK if _has_cyrillic(text) else MORSE_EN_MARK
     result = []
     for word in text.upper().split():
         encoded_word = []
@@ -173,20 +184,33 @@ def encode_morse(text: str) -> str:
             code = MORSE_TABLE.get(ch)
             encoded_word.append(code if code else ch)
         result.append(CHAR_SEP.join(encoded_word))
-    return WORD_SEP.join(result)
+    payload = WORD_SEP.join(result)
+    return marker + WORD_SEP + payload if payload else marker
 
 
 def decode_morse(text: str) -> str:
+    lang = None
+    body = text
+    if WORD_SEP in text:
+        first, rest = text.split(WORD_SEP, 1)
+        first = first.strip()
+        if first == MORSE_RU_MARK:
+            lang = "ru"
+            body = rest
+        elif first == MORSE_EN_MARK:
+            lang = "en"
+            body = rest
+    reverse = REVERSE_MORSE_RU if lang == "ru" else REVERSE_MORSE_EN if lang == "en" else REVERSE_MORSE_RU
     result = []
-    for word in text.split(WORD_SEP):
+    for word in body.split(WORD_SEP):
         decoded_word = []
         for sym in word.strip().split(CHAR_SEP):
             sym = sym.strip()
             if not sym:
                 continue
-            decoded_word.append(REVERSE_MORSE.get(sym, sym))
+            decoded_word.append(reverse.get(sym, sym))
         result.append("".join(decoded_word))
-    return " ".join(result)
+    return " ".join(result).strip()
 
 
 def is_morse(text: str) -> bool:
@@ -253,14 +277,13 @@ def decode_by_codec(codec: str, text: str) -> str:
 
 def parse_prefix(original: str) -> Tuple[Optional[str], str]:
     """
-    Prefixes:
+    Префиксы:
       !m   -> Morse
       !n   -> NATO
-      !raw -> do not encode (prefix removed)
+      !raw -> Не кодировать
     """
     s = original.lstrip()
     low = s.lower()
-
     if low.startswith("!raw "):
         return ("raw", s[5:])
     if low.startswith("!m "):
@@ -286,16 +309,14 @@ def get_drawer_menu_type() -> Optional[Any]:
     return None
 
 
-# -----------------------------
-# Plugin
-# -----------------------------
+# Сам плагин
 
 class MorseCodePlugin(BasePlugin):
 
     def on_plugin_load(self):
         self.add_on_send_message_hook()
 
-        # Context menu: Decode
+        # Кнопка в контекстном меню сообщений для декодирования
         self.add_menu_item(
             MenuItemData(
                 menu_type=MenuItemType.MESSAGE_CONTEXT_MENU,
@@ -307,7 +328,7 @@ class MorseCodePlugin(BasePlugin):
             )
         )
 
-        # Left drawer items (если поддерживаются)
+        # Кнопки в левом меню (если есть) для быстрого доступа к настройкам и включению/выключению
         drawer_type = get_drawer_menu_type()
         if drawer_type is not None:
             self.add_menu_item(
@@ -336,9 +357,7 @@ class MorseCodePlugin(BasePlugin):
     def on_plugin_unload(self):
         self.log("Morsegram plugin unloaded!")
 
-    # -------------------------
-    # Send hook
-    # -------------------------
+    # Хуки
 
     def on_send_message_hook(self, account: int, params: Any) -> HookResult:
         if not self.get_setting("enabled", True):
@@ -352,10 +371,10 @@ class MorseCodePlugin(BasePlugin):
         if not trimmed:
             return HookResult()
 
-        # Skip already encoded
-        if self.get_setting("skip_if_encoded", True):
-            if detect_codec(trimmed) in ("morse", "nato"):
-                return HookResult()
+        # Защита от двойной кодировки (если включена)
+
+        if self.get_setting("skip_if_encoded", True) and detect_codec(trimmed):
+            return HookResult()
 
         prefix_only = self.get_setting("prefix_only", False)
         default_codec = "nato" if self.get_setting("default_nato", False) else "morse"
@@ -374,7 +393,7 @@ class MorseCodePlugin(BasePlugin):
         payload = no_pref_text if pref_codec else original
         payload = payload.strip()
 
-        # RU -> NATO mode
+        # RU -> NATO
         if codec == "nato" and ru_to_nato:
             payload = translit_ru_to_lat(payload)
 
@@ -383,9 +402,7 @@ class MorseCodePlugin(BasePlugin):
         params.message = encoded
         return HookResult(strategy=HookStrategy.MODIFY, params=params)
 
-    # -------------------------
-    # Decode action
-    # -------------------------
+    # Декодировка
 
     def _on_decode_click(self, context: Dict[str, Any]):
         message = context.get("message")
@@ -401,8 +418,8 @@ class MorseCodePlugin(BasePlugin):
         if not codec:
             _bulletin_err("Not Morse / NATO text")
             return
-
         decoded = decode_by_codec(codec, text)
+
         self.log(f"Decode[{codec}]: '{text}' -> '{decoded}'")
 
         def show_dialog():
@@ -422,9 +439,7 @@ class MorseCodePlugin(BasePlugin):
 
         run_on_ui_thread(show_dialog)
 
-    # -------------------------
-    # Left menu: toggle
-    # -------------------------
+    # Меню слева
 
     def _on_left_toggle_click(self, _context: Dict[str, Any]):
         current = self.get_setting("enabled", True)
@@ -443,9 +458,7 @@ class MorseCodePlugin(BasePlugin):
         else:
             _bulletin_err("Can't toggle (set_setting not available in this build)")
 
-    # -------------------------
-    # Left menu: open settings / fallback
-    # -------------------------
+    # Меню слева - открыть настройки
 
     def _on_left_settings_click(self, _context: Dict[str, Any]):
         try:
@@ -468,9 +481,7 @@ class MorseCodePlugin(BasePlugin):
 
         run_on_ui_thread(show_dialog)
 
-    # -------------------------
-    # Settings UI
-    # -------------------------
+    # Настройки
 
     def create_settings(self):
         return [
