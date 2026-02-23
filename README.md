@@ -1,55 +1,85 @@
-# Morsegram
+# Morsegram — Exteragram Plugin
 
-Plugin for the Cutegram/CuteMessages plugin framework.
+---
 
-Encodes outgoing messages into:
-- **Morse code**
-- **NATO phonetic alphabet** (“Альфа Браво Чарли Дельта …”)
+## 🇷🇺 Русский
 
-Also adds a **Decode** button to the message context menu (long tap).
+Плагин для [Exteragram](https://exteragram.app/), который автоматически переводит исходящие сообщения в код Морзе. Любое сообщение можно декодировать обратно через контекстное меню.
 
-## Features
+### Возможности
 
-- ✅ Encode outgoing messages automatically
-- ✅ Multiple modes:
-  - **Always encode** (default)
-  - **Prefix-only**: encode only when you add a prefix
-- ✅ Quick overrides via prefixes:
-  - `!m ` — force **Morse**
-  - `!n ` — force **NATO**
-  - `!raw ` — send without encoding (removes prefix)
-- ✅ Decode any received encoded message:
-  - Long tap → **Decode**
-  - Auto-detects Morse vs NATO
-- ✅ Adds **Morsegram Settings** to the **left drawer menu** (if supported by your API build)
+- 🔡 **Автокодирование** — каждое отправляемое сообщение автоматически конвертируется в азбуку Морзе
+- 🔍 **Декодирование по запросу** — удерживайте сообщение и выберите **«Decode Morse»**, чтобы увидеть расшифровку
+- 🌍 **Поддержка нескольких языков** — латиница, кириллица, цифры и основные знаки препинания
+- ⚙️ **Переключатель** — кодирование можно включить или выключить в настройках плагина без удаления
 
-## Installation
+### Установка
 
-1. Put `morsegram.py` into your plugins folder.
-2. Reload plugins / restart the client.
-3. Open plugin settings and configure mode.
+1. Откройте **Exteragram → Настройки → Exteragram → Плагины**
+2. Нажмите **+** и выберите файл `morse_code.plugin`
+3. Включите плагин — готово!
 
-## Usage
+### Использование
 
-### Always encode (default)
-Any outgoing message is encoded using the **default codec** (Morse or NATO).
+#### Отправка сообщения в коде Морзе
+Просто напишите сообщение и нажмите **Отправить**. Плагин перехватит текст и переведёт его в азбуку Морзе (если кодирование включено в настройках).
 
-### Prefix-only mode
-Enable “Prefix-only mode” in settings.
+#### Декодирование полученного сообщения
+1. Удерживайте сообщение в коде Морзе
+2. Выберите **«Decode Morse»** в контекстном меню
+3. В диалоге отобразится исходный код Морзе и расшифрованный текст
 
-Now encoding happens only if you start the message with:
-- `!m ` Example: `!m Hello world`
-- `!n ` Example: `!n Hello world`
-- `!raw ` Example: `!raw Hello world`
+#### Настройки
+| Параметр | Описание | По умолчанию |
+|---|---|---|
+| Encode outgoing messages | Автоматически конвертирует исходящие сообщения в азбуку Морзе | ✅ Включено |
 
-### Decode
-Long tap any message → **Decode**.
+### Таблица кодов
 
-The plugin will detect:
-- Morse: contains only `. - space |`
-- NATO: many tokens like `АЛЬФА`, `BRAVO`, `CHARLIE`, etc.
+Плагин кодирует и декодирует **латиницу** (A–Z), **кириллицу** (А–Я), **цифры** (0–9) и множество знаков препинания:
 
-## Notes
+```
+. , ; : / ( ) ! ? _ " ' & - + = @ $
+```
 
-- NATO encoding uses Russian names (АЛЬФА/БРАВО/…) by default.
-- Decoding understands both RU and EN tokens (e.g. ALPHA/BRAVO or АЛЬФА/БРАВО).
+---
+
+## 🇬🇧 English
+
+An [Exteragram](https://exteragram.app/) plugin that automatically converts your outgoing messages to Morse code, with a built-in decoder accessible from the message context menu.
+
+### Features
+
+- 🔡 **Auto-encode** — every message you send is automatically converted to Morse code before delivery
+- 🔍 **Decode on demand** — long-tap any message and choose **"Decode Morse"** to see the decoded text in a dialog
+- 🌍 **Multilingual support** — handles Latin letters, Cyrillic letters, digits, and common punctuation
+- ⚙️ **Toggle switch** — enable or disable encoding from the plugin settings without uninstalling
+
+### Installation
+
+1. Open **Exteragram → Settings → Exteragram → Plugins**
+2. Tap the **+** button and choose `morse_code.plugin`
+3. Enable the plugin — that's it!
+
+### Usage
+
+#### Sending a Morse-coded message
+Just type your message and hit **Send** as usual. The plugin intercepts the message and converts it to Morse code automatically (when encoding is enabled in settings).
+
+#### Decoding a received message
+1. Long-tap the Morse-coded message
+2. Select **"Decode Morse"** from the context menu
+3. A dialog will show the original Morse and the decoded text
+
+#### Settings
+| Option | Description | Default |
+|---|---|---|
+| Encode outgoing messages | Automatically converts your messages to Morse code before sending | ✅ Enabled |
+
+### Morse code table
+
+The plugin encodes/decodes **Latin** (A–Z), **Cyrillic** (А–Я), **digits** (0–9), and a wide range of punctuation and special characters:
+
+```
+. , ; : / ( ) ! ? _ " ' & - + = @ $
+```
