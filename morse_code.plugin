@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional, Tuple
 
 __name__ = "Morsegram"
 __description__ = "Encodes outgoing messages. Long-tap any message to decode back."
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 __id__ = "morsegram"
 __author__ = "@fiudeus, @ntfepsilon"
 __min_version__ = "12.0.0"
@@ -76,11 +76,18 @@ for ch, code_raw in MORSE_TABLE.items():
     code = code_raw.strip()
     is_cyr = ("А" <= ch <= "Я") or ch in ("Ё",)
     is_lat = ("A" <= ch <= "Z")
+    is_digit = ("0" <= ch <= "9")
+    is_punct = not is_cyr and not is_lat and not is_digit
     if is_cyr:
         # Предпочитаем букву "Е"
         if code not in REVERSE_MORSE_RU or (REVERSE_MORSE_RU.get(code) == "Ё" and ch == "Е"):
             REVERSE_MORSE_RU[code] = ch
     if is_lat:
+        if code not in REVERSE_MORSE_EN:
+            REVERSE_MORSE_EN[code] = ch
+    if is_punct or is_digit:
+        if code not in REVERSE_MORSE_RU:
+            REVERSE_MORSE_RU[code] = ch
         if code not in REVERSE_MORSE_EN:
             REVERSE_MORSE_EN[code] = ch
 
