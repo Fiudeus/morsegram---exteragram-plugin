@@ -5,10 +5,12 @@ from ui.bulletin import BulletinHelper
 from ui.alert import AlertDialogBuilder
 from ui.settings import Header, Switch
 from typing import Dict, Any, Optional, Tuple
+from com.exteragram.messenger.plugins import PluginsController
+from com.exteragram.messenger.plugins.ui import PluginSettingsActivity
 
 __name__ = "Morsegram"
 __description__ = "Encodes outgoing messages. Long-tap any message to decode back."
-__version__ = "1.4.1"
+__version__ = "1.5.0"
 __id__ = "morsegram"
 __author__ = "@fiudeus, @ntfepsilon"
 __min_version__ = "12.0.0"
@@ -301,10 +303,11 @@ def parse_prefix(original: str) -> Tuple[Optional[str], str]:
 
 
 def get_drawer_menu_type() -> Optional[Any]:
+    if hasattr(MenuItemType, "DRAWER_MENU"):
+        return MenuItemType.DRAWER_MENU
     candidates = [
         "LEFT_MENU",
         "LEFT_DRAWER",
-        "DRAWER_MENU",
         "MAIN_MENU",
         "MAIN_DRAWER",
         "SIDE_MENU",
@@ -337,8 +340,8 @@ class MorseCodePlugin(BasePlugin):
 
         # Кнопки в левом меню (если есть) для быстрого доступа к настройкам и включению/выключению
         drawer_type = get_drawer_menu_type()
-        if drawer_type is not None:
-            self.add_menu_item(
+        if drawer_type is not None and self.get_setting("drawer_buttons", True):
+            self._drawer_toggle_item = self.add_menu_item(
                 MenuItemData(
                     menu_type=drawer_type,
                     text="Morsegram: ON/OFF",
@@ -348,20 +351,24 @@ class MorseCodePlugin(BasePlugin):
                     on_click=self._on_left_toggle_click,
                 )
             )
-            self.add_menu_item(
+            self._drawer_settings_item = self.add_menu_item(
                 MenuItemData(
                     menu_type=drawer_type,
                     text="Morsegram Settings",
-                    subtext="Morse / NATO modes",
+                    subtext="Open plugin settings",
                     icon="settings",
                     item_id="morsegram_settings",
                     on_click=self._on_left_settings_click,
                 )
             )
+        else:
+            self._drawer_toggle_item = None
+            self._drawer_settings_item = None
 
         self.log("Morsegram plugin loaded!")
 
     def on_plugin_unload(self):
+        self._remove_drawer_items()
         self.log("Morsegram plugin unloaded!")
 
     # Хуки
@@ -446,6 +453,56 @@ class MorseCodePlugin(BasePlugin):
 
         run_on_ui_thread(show_dialog)
 
+    #Удаление/добавление кнопок
+
+    def _remove_drawer_items(self):
+        try:
+            if getattr(self, "_drawer_toggle_item", None):
+                self.remove_menu_item(self._drawer_toggle_item)
+                self._drawer_toggle_item = None
+            if getattr(self, "_drawer_settings_item", None):
+                self.remove_menu_item(self._drawer_settings_item)
+                self._drawer_settings_item = None
+        except Exception:
+            pass
+
+    def _add_drawer_items(self):
+        drawer_type = get_drawer_menu_type()
+        if drawer_type is None:
+            return
+        if getattr(self, "_drawer_toggle_item", None) or getattr(self, "_drawer_settings_item", None):
+            return
+
+        self._drawer_toggle_item = self.add_menu_item(
+            MenuItemData(
+                menu_type=drawer_type,
+                text="Morsegram: ON/OFF",
+                subtext="Toggle plugin",
+                icon="settings",
+                item_id="morsegram_toggle",
+                on_click=self._on_left_toggle_click,
+            )
+        )
+        self._drawer_settings_item = self.add_menu_item(
+            MenuItemData(
+                menu_type=drawer_type,
+                text="Morsegram Settings",
+                subtext="Open plugin settings",
+                icon="settings",
+                item_id="morsegram_settings",
+                on_click=self._on_left_settings_click,
+            )
+        )
+
+    def _on_drawer_buttons_change(self, enabled: bool):
+        def do():
+            if enabled:
+                self._add_drawer_items()
+            else:
+                self._remove_drawer_items()
+
+        run_on_ui_thread(do)
+
     # Меню слева
 
     def _on_left_toggle_click(self, _context: Dict[str, Any]):
@@ -468,25 +525,23 @@ class MorseCodePlugin(BasePlugin):
     # Меню слева - открыть настройки
 
     def _on_left_settings_click(self, _context: Dict[str, Any]):
-        try:
-            if hasattr(self, "open_settings"):
-                self.open_settings()
-                return
-        except Exception:
-            pass
+        def open_settings():
+            try:
+                fragment = get_last_fragment()
+                if not fragment:
+                    BulletinHelper.show_error("Can't open settings (no fragment)")
+                    return
 
-        def show_dialog():
-            fragment = get_last_fragment()
-            if not fragment or not (activity := fragment.getParentActivity()):
-                return
+                java_plugin = PluginsController.getInstance().plugins.get(self.id)
+                if not java_plugin:
+                    BulletinHelper.show_error("Can't open settings (plugin not found)")
+                    return
 
-            dialog = AlertDialogBuilder(activity)
-            dialog.set_title("Morsegram")
-            dialog.set_message("Open plugin settings in the Plugins section.")
-            dialog.set_positive_button("OK", lambda d, w: d.dismiss())
-            dialog.show()
+                fragment.presentFragment(PluginSettingsActivity(java_plugin))
+            except Exception:
+                BulletinHelper.show_error("Failed to open settings")
 
-        run_on_ui_thread(show_dialog)
+        run_on_ui_thread(open_settings)
 
     # Настройки
 
@@ -527,5 +582,13 @@ class MorseCodePlugin(BasePlugin):
                 default=True,
                 subtext="Prevents double-encoding if message looks like Morse/NATO already",
                 icon="msg_info",
+            ),
+            Switch(
+                key="drawer_buttons",
+                text="Drawer buttons",
+                default=True,
+                subtext="Show Morsegram buttons in the left menu (toggle/settings)",
+                icon="msg_settings_14",
+                on_change=self._on_drawer_buttons_change,
             ),
         ]
