@@ -10,7 +10,7 @@ from com.exteragram.messenger.plugins.ui import PluginSettingsActivity
 
 __name__ = "Morsegram"
 __description__ = "Encodes outgoing messages. Long-tap any message to decode back."
-__version__ = "1.5.0"
+__version__ = "1.7.1"
 __id__ = "morsegram"
 __author__ = "@fiudeus, @ntfepsilon"
 __min_version__ = "12.0.0"
@@ -105,6 +105,28 @@ NATO_RU = {
     'Y': 'ЯНКИ',    'Z': 'ЗУЛУ',
 }
 
+NATO_LANG_RU_MARK = "К1ШЛАК"
+NATO_LANG_EN_MARK = "11:11"
+
+# Русский NATO-алфавит: чередуем читаемые коды и числа.
+# Пример: А->АЛЬФА, Б->1, В->БРАВО, Г->2, ...
+RU_LETTERS = [
+    'А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ё', 'Ж', 'З', 'И', 'Й',
+    'К', 'Л', 'М', 'Н', 'О', 'П', 'Р', 'С', 'Т', 'У', 'Ф',
+    'Х', 'Ц', 'Ч', 'Ш', 'Щ', 'Ъ', 'Ы', 'Ь', 'Э', 'Ю', 'Я',
+]
+
+NATO_RU_READABLE = [
+    'АЛЬФА', 'БРАВО', 'ЧАРЛИ', 'ДЕЛЬТА', 'ЭХО', 'ФОКСТРОТ', 'ГОЛЬФ',
+    'ХОТЕЛ', 'ИНДИЯ', 'ДЖУЛЬЕТ', 'КИЛО', 'ЛИМА', 'МАЙК', 'НОВЕМБЕР',
+    'ОСКАР', 'ПАПА', 'КВЕБЕК', 'РОМЕО', 'СЬЕРРА', 'ТАНГО', 'ЮНИФОРМ',
+    'ВИКТОР', 'ВИСКИ', 'ЭКС-РЭЙ', 'ЯНКИ', 'ЗУЛУ',
+]
+
+NATO_RU_ALT: Dict[str, str] = {}
+for i, ch in enumerate(RU_LETTERS):
+    NATO_RU_ALT[ch] = NATO_RU_READABLE[i // 2 % len(NATO_RU_READABLE)] if i % 2 == 0 else str((i + 1) // 2)
+
 NATO_EN = {
     'A': 'ALPHA', 'B': 'BRAVO', 'C': 'CHARLIE', 'D': 'DELTA', 'E': 'ECHO',
     'F': 'FOXTROT', 'G': 'GOLF', 'H': 'HOTEL', 'I': 'INDIA', 'J': 'JULIETT',
@@ -123,14 +145,34 @@ NATO_NUM_RU = {
 }
 
 REVERSE_NATO: Dict[str, str] = {}
-for k, v in NATO_RU.items():
-    REVERSE_NATO[v] = k
-for k, v in NATO_EN.items():
-    REVERSE_NATO[v] = k
-for k, v in NATO_NUM_EN.items():
-    REVERSE_NATO[v] = k
+REVERSE_NATO_RU: Dict[str, str] = {}
+REVERSE_NATO_EN: Dict[str, str] = {}
+for k, v in NATO_RU_ALT.items():
+    REVERSE_NATO_RU[v] = k
 for k, v in NATO_NUM_RU.items():
-    REVERSE_NATO[v] = k
+    REVERSE_NATO_RU[v] = k
+for k, v in NATO_EN.items():
+    REVERSE_NATO_EN[v] = k
+for k, v in NATO_NUM_EN.items():
+    REVERSE_NATO_EN[v] = k
+
+REVERSE_NATO.update(REVERSE_NATO_RU)
+REVERSE_NATO.update(REVERSE_NATO_EN)
+
+
+def _encode_unknown_char(ch: str) -> str:
+    return f"U{ord(ch):X}"
+
+
+def _decode_unknown_token(tok: str) -> Optional[str]:
+    if len(tok) >= 2 and tok[0] == "U":
+        try:
+            code = int(tok[1:], 16)
+            if 0 <= code <= 0x10FFFF:
+                return chr(code)
+        except Exception:
+            return None
+    return None
 
 # RU -> LAT translit for NATO mode (сделано максимально однозначно: Й->J, Ы->Y, Э->EH, Х->KH)
 
@@ -191,7 +233,7 @@ def encode_morse(text: str) -> str:
         encoded_word = []
         for ch in word:
             code = MORSE_TABLE.get(ch)
-            encoded_word.append(code if code else ch)
+            encoded_word.append(code if code else _encode_unknown_char(ch))
         result.append(CHAR_SEP.join(encoded_word))
     payload = WORD_SEP.join(result)
     return marker + WORD_SEP + payload if payload else marker
@@ -217,7 +259,8 @@ def decode_morse(text: str) -> str:
             sym = sym.strip()
             if not sym:
                 continue
-            decoded_word.append(reverse.get(sym, sym))
+            escaped = _decode_unknown_token(sym)
+            decoded_word.append(escaped if escaped is not None else reverse.get(sym, sym))
         result.append("".join(decoded_word))
     return " ".join(result).strip()
 
@@ -226,33 +269,58 @@ def is_morse(text: str) -> bool:
     s = text.strip()
     if not s:
         return False
+    if WORD_SEP in s:
+        first = s.split(WORD_SEP, 1)[0].strip()
+        if first in (MORSE_RU_MARK, MORSE_EN_MARK):
+            return True
     return all(c in ".- |" for c in s) and ("." in s or "-" in s)
 
 
 def encode_nato(text: str) -> str:
+    is_ru = _has_cyrillic(text)
+    marker = NATO_LANG_RU_MARK if is_ru else NATO_LANG_EN_MARK
     result = []
     for word in text.upper().split():
         encoded_word = []
         for ch in word:
-            if ch in NATO_RU:
-                encoded_word.append(NATO_RU[ch])
-            elif ch in NATO_NUM_RU:
+            if is_ru and ch in NATO_RU_ALT:
+                encoded_word.append(NATO_RU_ALT[ch])
+            elif is_ru and ch in NATO_NUM_RU:
                 encoded_word.append(NATO_NUM_RU[ch])
+            elif not is_ru and ch in NATO_EN:
+                encoded_word.append(NATO_EN[ch])
+            elif not is_ru and ch in NATO_NUM_EN:
+                encoded_word.append(NATO_NUM_EN[ch])
             else:
-                encoded_word.append(ch)
+                encoded_word.append(_encode_unknown_char(ch))
         result.append(CHAR_SEP.join(encoded_word))
-    return WORD_SEP.join(result)
+    payload = WORD_SEP.join(result)
+    return marker + WORD_SEP + payload if payload else marker
 
 
 def decode_nato(text: str) -> str:
+    lang = None
+    body = text
+    if WORD_SEP in text:
+        first, rest = text.split(WORD_SEP, 1)
+        first = _norm_token(first)
+        if first == NATO_LANG_RU_MARK:
+            lang = "ru"
+            body = rest
+        elif first == NATO_LANG_EN_MARK:
+            lang = "en"
+            body = rest
+
+    reverse = REVERSE_NATO_RU if lang == "ru" else REVERSE_NATO_EN if lang == "en" else REVERSE_NATO
     result = []
-    for word in text.split(WORD_SEP):
+    for word in body.split(WORD_SEP):
         decoded_word = []
         for tok in word.strip().split(CHAR_SEP):
             tok = _norm_token(tok)
             if not tok:
                 continue
-            decoded_word.append(REVERSE_NATO.get(tok, tok))
+            escaped = _decode_unknown_token(tok)
+            decoded_word.append(escaped if escaped is not None else reverse.get(tok, tok))
         result.append("".join(decoded_word))
     return " ".join(result)
 
@@ -264,6 +332,8 @@ def is_nato(text: str) -> bool:
     tokens = [_norm_token(t) for t in s.replace("|", " ").split() if t.strip()]
     if not tokens:
         return False
+    if tokens[0] in (NATO_LANG_RU_MARK, NATO_LANG_EN_MARK):
+        return True
     known = sum(1 for t in tokens if t in REVERSE_NATO)
     return known >= 2 and known >= max(2, len(tokens) // 2)
 
@@ -373,20 +443,36 @@ class MorseCodePlugin(BasePlugin):
 
     # Хуки
 
+    def _extract_outgoing_text(self, params: Any) -> Tuple[Optional[str], Optional[str]]:
+        for field in ("message", "caption", "messageText", "text"):
+            if hasattr(params, field):
+                value = getattr(params, field)
+                if isinstance(value, str):
+                    return field, value
+        return None, None
+
+    def _set_outgoing_text(self, params: Any, field: Optional[str], value: str) -> bool:
+        if not field:
+            return False
+        try:
+            setattr(params, field, value)
+            return True
+        except Exception:
+            return False
+
     def on_send_message_hook(self, account: int, params: Any) -> HookResult:
         if not self.get_setting("enabled", True):
             return HookResult()
 
-        if not hasattr(params, "message") or not isinstance(params.message, str):
+        text_field, original = self._extract_outgoing_text(params)
+        if not text_field or original is None:
             return HookResult()
 
-        original = params.message
         trimmed = original.strip()
         if not trimmed:
             return HookResult()
 
         # Защита от двойной кодировки (если включена)
-
         if self.get_setting("skip_if_encoded", True) and detect_codec(trimmed):
             return HookResult()
 
@@ -397,8 +483,9 @@ class MorseCodePlugin(BasePlugin):
         pref_codec, no_pref_text = parse_prefix(original)
 
         if pref_codec == "raw":
-            params.message = no_pref_text
-            return HookResult(strategy=HookStrategy.MODIFY, params=params)
+            if self._set_outgoing_text(params, text_field, no_pref_text):
+                return HookResult(strategy=HookStrategy.MODIFY, params=params)
+            return HookResult()
 
         if prefix_only and pref_codec is None:
             return HookResult()
@@ -412,8 +499,9 @@ class MorseCodePlugin(BasePlugin):
             payload = translit_ru_to_lat(payload)
 
         encoded = encode_by_codec(codec, payload)
-        self.log(f"Encode[{codec}]: '{payload}' -> '{encoded}'")
-        params.message = encoded
+        self.log(f"Encode[{codec}] ({text_field}): '{payload}' -> '{encoded}'")
+        if not self._set_outgoing_text(params, text_field, encoded):
+            return HookResult()
         return HookResult(strategy=HookStrategy.MODIFY, params=params)
 
     # Декодировка
