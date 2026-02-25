@@ -10,7 +10,7 @@ from com.exteragram.messenger.plugins.ui import PluginSettingsActivity
 
 __name__ = "Morsegram"
 __description__ = "Encodes outgoing messages. Long-tap any message to decode back."
-__version__ = "1.7.1"
+__version__ = "1.7.2"
 __id__ = "morsegram"
 __author__ = "@fiudeus, @ntfepsilon"
 __min_version__ = "12.0.0"
@@ -21,6 +21,8 @@ WORD_SEP = " | "
 CHAR_SEP = " "
 MORSE_RU_MARK = "........."
 MORSE_EN_MARK = "---------"
+NATO_LANG_RU_MARK = "11:11"
+NATO_LANG_EN_MARK = "22:22"
 
 # Таблица морзе
 
@@ -104,9 +106,6 @@ NATO_RU = {
     'U': 'ЮНИФОРМ', 'V': 'ВИКТОР',  'W': 'ВИСКИ',   'X': 'ЭКС-РЭЙ',
     'Y': 'ЯНКИ',    'Z': 'ЗУЛУ',
 }
-
-NATO_LANG_RU_MARK = "К1ШЛАК"
-NATO_LANG_EN_MARK = "11:11"
 
 # Русский NATO-алфавит: чередуем читаемые коды и числа.
 # Пример: А->АЛЬФА, Б->1, В->БРАВО, Г->2, ...
