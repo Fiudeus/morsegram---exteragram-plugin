@@ -10,7 +10,7 @@ from com.exteragram.messenger.plugins.ui import PluginSettingsActivity
 
 __name__ = "Morsegram"
 __description__ = "Encodes outgoing messages. Long-tap any message to decode back."
-__version__ = "1.7.2"
+__version__ = "1.7.3"
 __id__ = "morsegram"
 __author__ = "@fiudeus, @ntfepsilon"
 __min_version__ = "12.0.0"
@@ -21,6 +21,7 @@ WORD_SEP = " | "
 CHAR_SEP = " "
 MORSE_RU_MARK = "........."
 MORSE_EN_MARK = "---------"
+MORSE_ESC_MARK = ".-.-.-.-."
 NATO_LANG_RU_MARK = "11:11"
 NATO_LANG_EN_MARK = "22:22"
 
@@ -95,6 +96,10 @@ for ch, code_raw in MORSE_TABLE.items():
         if code not in REVERSE_MORSE_EN:
             REVERSE_MORSE_EN[code] = ch
 
+HEX_DIGITS = "0123456789ABCDEF"
+MORSE_HEX_ENC: Dict[str, str] = {d: MORSE_TABLE[d] for d in HEX_DIGITS}
+MORSE_HEX_DEC: Dict[str, str] = {MORSE_TABLE[d].strip(): d for d in HEX_DIGITS}
+
 # NATO (Альфа/Браво/…)
 
 NATO_RU = {
@@ -158,6 +163,7 @@ for k, v in NATO_NUM_EN.items():
 REVERSE_NATO.update(REVERSE_NATO_RU)
 REVERSE_NATO.update(REVERSE_NATO_EN)
 
+# Скорее всего устаревшее, но пока что будем использовать для NATO
 
 def _encode_unknown_char(ch: str) -> str:
     return f"U{ord(ch):X}"
@@ -171,6 +177,35 @@ def _decode_unknown_token(tok: str) -> Optional[str]:
                 return chr(code)
         except Exception:
             return None
+    return None
+
+# Новая схема кодирования неизвестных символов для MORSE:
+# отдельное слово, начинающееся с MORSE_ESC_MARK, и далее код в виде последовательности MORSE для каждой hex-цифры
+
+def _encode_unknown_char_as_morse_word(ch: str) -> str:
+    hex_str = f"{ord(ch):X}"
+    hex_tokens = [MORSE_HEX_ENC[d] for d in hex_str]
+    return CHAR_SEP.join([MORSE_ESC_MARK] + hex_tokens)
+
+
+def _decode_unknown_morse_word(word: str) -> Optional[str]:
+    parts = [p for p in word.strip().split(CHAR_SEP) if p]
+    if not parts or parts[0] != MORSE_ESC_MARK:
+        return None
+    if len(parts) < 2:
+        return None
+    hex_digits = []
+    for tok in parts[1:]:
+        d = MORSE_HEX_DEC.get(tok.strip())
+        if not d:
+            return None
+        hex_digits.append(d)
+    try:
+        code = int("".join(hex_digits), 16)
+        if 0 <= code <= 0x10FFFF:
+            return chr(code)
+    except Exception:
+        return None
     return None
 
 # RU -> LAT translit for NATO mode (сделано максимально однозначно: Й->J, Ы->Y, Э->EH, Х->KH)
@@ -227,14 +262,21 @@ def _bulletin_err(msg: str):
 
 def encode_morse(text: str) -> str:
     marker = MORSE_RU_MARK if _has_cyrillic(text) else MORSE_EN_MARK
-    result = []
+    out_words = []
     for word in text.upper().split():
-        encoded_word = []
+        encoded_tokens = []
         for ch in word:
             code = MORSE_TABLE.get(ch)
-            encoded_word.append(code if code else _encode_unknown_char(ch))
-        result.append(CHAR_SEP.join(encoded_word))
-    payload = WORD_SEP.join(result)
+            if code:
+                encoded_tokens.append(code)
+            else:
+                if encoded_tokens:
+                    out_words.append(CHAR_SEP.join(encoded_tokens))
+                    encoded_tokens = []
+                out_words.append(_encode_unknown_char_as_morse_word(ch))
+        if encoded_tokens:
+            out_words.append(CHAR_SEP.join(encoded_tokens))
+    payload = WORD_SEP.join(out_words)
     return marker + WORD_SEP + payload if payload else marker
 
 
@@ -251,17 +293,23 @@ def decode_morse(text: str) -> str:
             lang = "en"
             body = rest
     reverse = REVERSE_MORSE_RU if lang == "ru" else REVERSE_MORSE_EN if lang == "en" else REVERSE_MORSE_RU
-    result = []
+    result_words = []
     for word in body.split(WORD_SEP):
+        word = word.strip()
+        if not word:
+            continue
+        escaped = _decode_unknown_morse_word(word)
+        if escaped is not None:
+            result_words.append(escaped)
+            continue
         decoded_word = []
-        for sym in word.strip().split(CHAR_SEP):
+        for sym in word.split(CHAR_SEP):
             sym = sym.strip()
             if not sym:
                 continue
-            escaped = _decode_unknown_token(sym)
-            decoded_word.append(escaped if escaped is not None else reverse.get(sym, sym))
-        result.append("".join(decoded_word))
-    return " ".join(result).strip()
+            decoded_word.append(reverse.get(sym, sym))
+        result_words.append("".join(decoded_word))
+    return " ".join(result_words).strip()
 
 
 def is_morse(text: str) -> bool:
